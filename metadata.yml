@@ -1,0 +1,71 @@
+title: ניתוח שאלון שלומות
+description_html: |-
+  <p>הצגה של נתונים מתוך שאלון שלמות, עם אפשרות לחיתוכים.</p>
+  <ul>
+    <li>זוהי גרסה ראשונית בלבד</li>
+  </ul>
+databases:
+  sheelon.db:
+    allow: true
+    # We could probably do better if this file is generated
+
+plugins:
+  datasette-dashboards:
+    my-dashboard:
+      title: שאלון שלומות
+      description: שאלון עם דמוגרפיה
+      # What's below here should be generated
+      filters:
+        gen_expr_low:
+          name: מינ ותק בחינוך
+          type: number
+          min: 20
+          max: 100
+          step: 10
+        gen_expr_high:
+          name: מקס ותק בחינוך
+          type: number
+          min: 20
+          max: 100
+          step: 10
+        gender:
+          name: מגדר
+          type: select
+          options: [גבר, אישה, מעדיף/ה לא לציין]
+      layout:
+        - [t1]
+        - [c1]
+        - [c2]        
+      charts:
+        t1:
+          library: markdown
+          display: |-
+            # שאלון שלומות
+            > תיכף נראה מה זה זה
+
+        c1:
+          title: באיזו מידה יש לך השפעה בנוגע לעבודתך?
+          db: sheelon
+          library: metric
+          query: with
+            filtered as (
+              select * from sheelon WHERE TRUE
+                [[ AND "שנות ותק בחינוך/בהוראה" >= :gen_expr_low ]]
+                [[ AND "שנות ותק בחינוך/בהוראה" <= :gen_expr_high ]]
+                [[ AND "מגדר" = :gender ]]
+            ),
+            t as (select count(*) as total_count from filtered),
+            data as (
+              select filtered.* from filtered cross join t where total_count>20
+            )
+            select [באיזו מידה יש לך השפעה בנוגע לעבודתך?],
+                   count([באיזו מידה יש לך השפעה בנוגע לעבודתך?]) as [מספר]
+                from data
+            group by [באיזו מידה יש לך השפעה בנוגע לעבודתך?]
+          library: vega-lite
+          display:
+            mark: { type: arc, tooltip: true }
+            encoding:
+              color: { field: '[באיזו מידה יש לך השפעה בנוגע לעבודתך?]', type: nominal }
+              theta: { field: '[מספר]', type: quantitative }
+              

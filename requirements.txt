@@ -1,0 +1,19 @@
+# Essentials:
+datasette
+sqlite-utils
+pip
+pysqlite3-binary
+
+# Plugins - uncomment to install:
+
+# - Plot latitude/longitude on a map:
+# datasette-cluster-map
+
+# - Add bar/line/scatter plots:
+datasette-vega
+
+# - Create dashboards
+datasette-dashboards
+
+# More plugins here:
+#   https://datasette.io/plugins
