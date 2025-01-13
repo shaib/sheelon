@@ -5,13 +5,15 @@ description_html: |-
     <li>זוהי גרסה ראשונית בלבד</li>
   </ul>
 databases:
-  sheelon.db:
-    allow: true
-    # We could probably do better if this file is generated
+  sheelon:
+    tables:
+      sheelon:
+        allow: false
 
 plugins:
   datasette-dashboards:
     my-dashboard:
+      allow: true
       title: שאלון שלומות
       description: שאלון עם דמוגרפיה
       # What's below here should be generated
