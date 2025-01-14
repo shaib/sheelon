@@ -15,5 +15,11 @@ datasette-vega
 # - Create dashboards
 datasette-dashboards
 
+# - Publush to Vercel
+datasette-publish-vercel
+
+# - Very basic auth
+datasette-auth-passwords
+
 # More plugins here:
 #   https://datasette.io/plugins

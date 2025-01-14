@@ -1,0 +1,41 @@
+{
+    "name": "shlomut",
+    "version": 2,
+    "builds": [
+        {
+            "src": "index.py",
+            "use": "@vercel/python"
+        }
+    ],
+    "redirects": [
+        {
+            "source":  "/((?!-/login|-/static).*)",
+            "missing": [
+		{
+		    "type": "cookie",
+		    "key": "ds_actor"
+		}
+	    ],
+	    "destination": "/-/login",
+	    "permanent": false
+	},
+        {
+            "source": "/",
+            "has": [
+		{
+		    "type": "cookie",
+		    "key": "ds_actor"
+		}
+	    ],
+	    "destination": "/-/dashboards/shlomut",
+	    "permanent": false
+	}
+    ],
+    "rewrites": [
+	{
+	    "source": "(.*)",
+	    "destination": "index.py"
+	}
+    ]
+
+}
