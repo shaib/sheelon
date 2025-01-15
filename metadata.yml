@@ -37,7 +37,7 @@ plugins:
       layout:
         - [t1]
         - [c1]
-        - [c2]        
+        - [c2]
       charts:
         t1:
           library: markdown
@@ -60,14 +60,89 @@ plugins:
             data as (
               select filtered.* from filtered cross join t where total_count>20
             )
-            select [באיזו מידה יש לך השפעה בנוגע לעבודתך?],
-                   count([באיזו מידה יש לך השפעה בנוגע לעבודתך?]) as [מספר]
+            select [באיזו מידה יש לך השפעה בנוגע לעבודתך?] as what,
+                   count([באיזו מידה יש לך השפעה בנוגע לעבודתך?]) as num
                 from data
-            group by [באיזו מידה יש לך השפעה בנוגע לעבודתך?]
+            group by what
           library: vega-lite
           display:
-            mark: { type: arc, tooltip: true }
+            mark: { type: bar, tooltip: true }
+            transform:
+              - impute: num
+                key: what
+                keyvals:
+                  - "במידה מועטה מאוד או כלל לא"
+                  - "במידה מועטה"
+                  - "במידה בינונית"
+                  - "במידה רבה"
+                  - "במידה רבה מאוד"
+                method: value
+                value: 0
+              - calculate: 'indexof(["במידה מועטה מאוד או כלל לא","במידה מועטה","במידה בינונית","במידה רבה","במידה רבה מאוד"], datum.what) + 1 + ". " + datum.what'
+                as: sorter
+              - calculate: "'‏' + datum.sorter"  # Note: the '' contains a RLM
+                as: sorterrtl
+
             encoding:
-              color: { field: '[באיזו מידה יש לך השפעה בנוגע לעבודתך?]', type: nominal }
-              theta: { field: '[מספר]', type: quantitative }
+              x:
+                field: num
+                type: quantitative
+                title: 'מספר'
+              color:
+                field: sorterrtl
+                type: nominal
+                title: 'באיזו מידה יש לך השפעה בנוגע לעבודתך?'
+                legend:
+                  direction: horizontal
+                  orient: top
               
+        c2:
+          title: באיזו מידה את/ה מרגיש/ה שיש לך השפעה על תהליכי קבלת ההחלטות בבית הספר?
+          db: sheelon
+          library: metric
+          query: with
+            filtered as (
+              select * from sheelon WHERE TRUE
+                [[ AND "שנות ותק בחינוך/בהוראה" >= :gen_expr_low ]]
+                [[ AND "שנות ותק בחינוך/בהוראה" <= :gen_expr_high ]]
+                [[ AND "מגדר" = :gender ]]
+            ),
+            t as (select count(*) as total_count from filtered),
+            data as (
+              select filtered.* from filtered cross join t where total_count>20
+            )
+            select [באיזו מידה את/ה מרגיש/ה שיש לך השפעה על תהליכי קבלת ההחלטות בבית הספר?] as what,
+                   count([באיזו מידה את/ה מרגיש/ה שיש לך השפעה על תהליכי קבלת ההחלטות בבית הספר?]) as num
+                from data
+            group by what
+          library: vega-lite
+          display:
+            mark: { type: bar, tooltip: true }
+            transform:
+              - impute: num
+                key: what
+                keyvals:
+                  - "במידה מועטה מאוד או כלל לא"
+                  - "במידה מועטה"
+                  - "במידה בינונית"
+                  - "במידה רבה"
+                  - "במידה רבה מאוד"
+                method: value
+                value: 0
+              - calculate: 'indexof(["במידה מועטה מאוד או כלל לא","במידה מועטה","במידה בינונית","במידה רבה","במידה רבה מאוד"], datum.what) + 1 + ". " + datum.what'
+                as: sorter
+              - calculate: "'‏' + datum.sorter" # Note: the '' contains a RLM
+                as: sorterrtl
+
+            encoding:
+              x:
+                field: num
+                type: quantitative
+                title: 'מספר'
+              color:
+                field: sorterrtl
+                type: nominal
+                title: 'באיזו מידה את/ה מרגיש/ה שיש לך השפעה על תהליכי קבלת ההחלטות בבית הספר?'
+                legend:
+                  direction: horizontal
+                  orient: top
