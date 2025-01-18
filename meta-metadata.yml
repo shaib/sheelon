@@ -27,22 +27,57 @@ dashboard:
     title: שאלון שלומות
     description: שאלון עם דמוגרפיה
     filters:
-      gen_expr_low:
+      a_gender:
+        name: מגדר
+        type: select
+        options: [גבר, אישה, מעדיף/ה לא לציין]
+      b_gen_expr_low:
         name: מינ ותק בחינוך
         type: number
         min: 0
         max: 100
         step: 1
-      gen_expr_high:
+      c_gen_expr_high:
         name: מקס ותק בחינוך
         type: number
         min: 0
         max: 100
         step: 1
-      gender:
-        name: מגדר
+      d_local_expr_low:
+        name: מינ ותק בחינוך במ״א אשכול
+        type: number
+        min: 0
+        max: 100
+        step: 1
+      e_local_expr_high:
+        name: מקס ותק בחינוך במ״א אשכול
+        type: number
+        min: 0
+        max: 100
+        step: 1
+      f_position:
+        name: תפקיד
         type: select
-        options: [גבר, אישה, מעדיף/ה לא לציין]
+        options:
+          - יועץ/ת
+          - מורה מקצוע
+          - מורה/ת שילוב
+          - מחנכ/ת
+          - מתנדב/ת
+          - סייע/ת גיל הרך
+          - סייע/ת חינוך מיוחד
+          - תומך/ת הוראה
+      g_school:
+        name: בית ספר
+        type: select
+        options:
+          - מרחבי אשכול
+          - נופי הבשור
+          - נעם נצרים בנות
+          - נעם נצרים בנים
+          - קידום הנוער
+          - שדות אשכול
+          - שחר אשכול
     charts:
       t1:
         library: markdown
@@ -57,9 +92,13 @@ dashboard:
       preamble: WITH
         filtered AS (
           SELECT * FROM sheelon WHERE TRUE
-            [[ AND "שנות ותק בחינוך/בהוראה" >= :gen_expr_low ]]
-            [[ AND "שנות ותק בחינוך/בהוראה" <= :gen_expr_high ]]
-            [[ AND "מגדר" = :gender ]]
+            [[ AND "מגדר" = :a_gender ]]
+            [[ AND "שנות ותק בחינוך/בהוראה" >= :b_gen_expr_low ]]
+            [[ AND "שנות ותק בחינוך/בהוראה" <= :c_gen_expr_high ]]
+            [[ AND "שנות וותק במערכת החינוך במועצה איזורית אשכול" >= :d_local_expr_low ]]
+            [[ AND "שנות וותק במערכת החינוך במועצה איזורית אשכול" <= :e_local_expr_high ]]
+            [[ AND "תפקידך במערכת החינוך:" = :f_position ]]
+            [[ AND "שם בית הספר" = :g_school ]]
           ),
         t AS (SELECT COUNT(*) AS total_count FROM filtered),
         data AS (
