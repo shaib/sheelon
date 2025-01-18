@@ -140,12 +140,30 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
                     f"indexof({choices}, datum.what)+1 + '. ' + datum.what"
                 )
                 chart['display']['encoding']['color']['title'] = title
-                dashboard['charts'][f'c{idx}'] = chart
-                
+                dashboard['charts'][f'c-{idx:02d}'] = chart
+
+    option_sets = get_option_sets(cols)
+    for set_name,options,col_idx in option_sets:
+        chart = copy.deepcopy(dashgen['option_set']['static'])
+        chart['title'] = title = set_name + '\N{RLM}'
+        query = " UNION ALL ".join(
+            dashgen['query']['option_set_clause_template'].format(
+                field_name=option,
+                set_name=set_name
+            )
+            for option in options
+        )
+        chart['query'] = " ".join(
+            (dashgen['query']['preamble'], query)
+        )
+        chart['display']['encoding']['color']['title'] = title
+        chart['display']['encoding']['x']['title'] = title
+        dashboard['charts'][f'c-{col_idx:02d}'] = chart
+
     dashboard['layout'].extend(
         pairs(
-            f'c{j}' for j in range(len(cols))
-            if f'c{j}' in dashboard['charts']
+            f'c-{j:02d}' for j in range(len(cols))
+            if f'c-{j:02d}' in dashboard['charts']
         )
     )
     metadata['plugins']['datasette-dashboards'] = {
@@ -153,6 +171,31 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
     }
     with open(name, 'wt') as out:
         yaml.safe_dump(metadata, out)
+
+
+def get_option_sets(cols):
+    set_name, options, col_idx = None, [], 0
+    for idx, col in enumerate(cols, start=1):
+        if SPECIAL_SEP not in col:
+            if set_name:
+                # A set ended
+                yield set_name, options, col_idx
+                set_name, options, col_idx = None, [], 0
+            # Either way, nothing more to process here
+            continue
+        # col is a split name
+        title,option = col.split(SPECIAL_SEP)
+        if set_name:
+            if title == set_name:
+                # Another member of existing set
+                options.append(option)
+            else:
+                # A set ended, and a new one starts
+                yield set_name, options, col_idx
+                set_name, options, col_idx = title, [option], idx
+        else:
+            # A set is starting after non-set
+            set_name, options, col_idx = title, [option], idx
 
 
 def pairs(seq, fill='.'):

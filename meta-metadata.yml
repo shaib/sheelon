@@ -70,6 +70,9 @@ dashboard:
         FROM data
         WHERE LENGTH(what)>1
         GROUP BY what
+      option_set_clause_template:
+        SELECT '{field_name}' AS what, SUM("{set_name}÷{field_name}") AS num
+        FROM data
 
     level_choice:
       static:
@@ -129,3 +132,42 @@ dashboard:
           - ג. בינוני
           - ד. לא טוב
           - ה. כלל לא טוב
+
+    option_set:
+      static:
+        db: sheelon
+        library: vega-lite
+        # insert title
+        # insert query
+        display:
+          mark: { type: bar, tooltip: true }
+          transform:
+            - calculate: "replace(datum.what,
+              'אחר (נא',
+              '‏אחר (נא'
+              )"
+              # The replacement has a RLM, to make values that
+              # start with this string last in order
+              as: sorter
+          encoding:
+            y:
+              field: num
+              scale:
+                domain:
+                  - 0
+                  - 100
+              title: 'מספר'
+              type: quantitative
+            x:
+              field: sorter
+              type: nominal
+              # title to be inserted here
+            color:
+              field: sorter
+              type: nominal
+              # title to be inserted here
+              legend:
+                direction: vertical
+                orient: top
+                # labelAlign: right
+                labelLimit: 320
