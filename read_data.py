@@ -99,7 +99,7 @@ def write_db_table(db, table_name, csv_table):
     table.insert_all(
         row_dicts := [
             {
-                name: bool(val) if name in bool_columns else val
+                name: bool(val) if name in bool_columns else val.rstrip(",")
                 for name,val in zip(header,row)
                 if name not in KILL_COLUMNS
             }
