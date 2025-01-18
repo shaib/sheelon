@@ -49,6 +49,8 @@ dashboard:
         display: |-
           # שאלון שלומות
           > תיכף נראה מה זה זה
+    layout:
+      - [t1, '.']
           
   generate:
     query:

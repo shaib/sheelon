@@ -142,13 +142,22 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
                 chart['display']['encoding']['color']['title'] = title
                 dashboard['charts'][f'c{idx}'] = chart
                 
-    
+    dashboard['layout'].extend(
+        pairs(
+            f'c{j}' for j in range(len(cols))
+            if f'c{j}' in dashboard['charts']
+        )
+    )
     metadata['plugins']['datasette-dashboards'] = {
         metadashboard['name']: dashboard
     }
     with open(name, 'wt') as out:
-        yaml.dump(metadata, out)
-    
+        yaml.safe_dump(metadata, out)
+
+
+def pairs(seq, fill='.'):
+    i = iter(seq)
+    return itertools.zip_longest(i, i, fillvalue=fill)
 
 if __name__ == "__main__":
     import sys
