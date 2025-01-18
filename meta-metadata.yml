@@ -1,0 +1,111 @@
+preamble:
+  title: ניתוח שאלון שלומות
+  description_html: |-
+    <p>הצגה של נתונים מתוך שאלון שלמות, עם אפשרות לחיתוכים.</p>
+    <ul>
+      <li>זוהי גרסה ראשונית בלבד</li>
+    </ul>
+  databases:
+    sheelon:
+      tables:
+        sheelon:
+          allow: false
+
+  allow:
+    id:
+      - superuser
+      - root
+
+  plugins:
+    datasette-auth-passwords:
+      superuser_password_hash:
+        $env: PASSWORD_HASH_SUPER_1
+
+dashboard:
+  name: shlomut
+  static:
+    title: שאלון שלומות
+    description: שאלון עם דמוגרפיה
+    filters:
+      gen_expr_low:
+        name: מינ ותק בחינוך
+        type: number
+        min: 0
+        max: 100
+        step: 1
+      gen_expr_high:
+        name: מקס ותק בחינוך
+        type: number
+        min: 0
+        max: 100
+        step: 1
+      gender:
+        name: מגדר
+        type: select
+        options: [גבר, אישה, מעדיף/ה לא לציין]
+    charts:
+      t1:
+        library: markdown
+        display: |-
+          # שאלון שלומות
+          > תיכף נראה מה זה זה
+          
+  generate:
+    query:
+      preamble: WITH
+        filtered AS (
+          SELECT * FROM sheelon WHERE TRUE
+            [[ AND "שנות ותק בחינוך/בהוראה" >= :gen_expr_low ]]
+            [[ AND "שנות ותק בחינוך/בהוראה" <= :gen_expr_high ]]
+            [[ AND "מגדר" = :gender ]]
+          ),
+        t AS (SELECT COUNT(*) AS total_count FROM filtered),
+        data AS (
+          SELECT filtered.* FROM filtered CROSS JOIN t WHERE total_count>20
+        )
+      count_template:
+        SELECT {field_name} AS what, COUNT({field_name}) AS num
+        FROM data
+        WHERE LENGTH(what)>1
+        GROUP BY what
+
+    level_choice:
+      static:
+        db: sheelon
+        library: vega-lite
+        # insert title
+        # insert query
+        display:
+          mark: { type: bar, tooltip: true }
+          transform:
+            - impute: num
+              key: what
+              # keyvals to be inserted here
+              method: value
+              value: 0
+            - # 'calculate' to be inserted here
+              as: sorter
+            - calculate: "'‏' + datum.sorter"  # Note: the '' contains a RLM
+              as: sorterrtl
+              
+          encoding:
+            x:
+              field: num
+              type: quantitative
+              title: 'מספר'
+            color:
+              field: sorterrtl
+              type: nominal
+              # title to be inserted here
+              legend:
+                direction: horizontal
+                orient: top
+
+      keyvals:
+        מידה:
+          - "במידה מועטה מאוד או כלל לא"
+          - "במידה מועטה"
+          - "במידה בינונית"
+          - "במידה רבה"
+          - "במידה רבה מאוד"
+          

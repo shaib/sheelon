@@ -1,6 +1,8 @@
+import copy
 import csv
 import itertools
 
+import yaml
 from sqlite_utils import Database
 
 
@@ -40,7 +42,8 @@ def main(argv: list[str], db_name="sheelon.db", table_name="sheelon"):
 
         reader = csv.reader(f)
         csv_table = read_sheelon(reader)
-        write_db_table(db, table_name, csv_table)
+        csv_rows = write_db_table(db, table_name, csv_table)
+        make_metadata_yml(csv_rows)
     
 
 def read_sheelon(reader):
@@ -94,17 +97,58 @@ def write_db_table(db, table_name, csv_table):
     }
     
     table.insert_all(
-        (
+        row_dicts := [
             {
                 name: bool(val) if name in bool_columns else val
                 for name,val in zip(header,row)
                 if name not in KILL_COLUMNS
             }
             for row in csv_table
-        ),
+        ],
         pk=id_column, columns={**bool_columns, **int_columns}
     )
+    return row_dicts
 
+
+def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
+
+    IMPUTE = 0
+    CALC_SORTER = 1
+    
+    source_name = prefix+name
+    with open(source_name) as f:
+        meta_meta = yaml.safe_load(f)
+    metadata = meta_meta['preamble']
+    metadashboard = meta_meta['dashboard']
+    dashboard = copy.deepcopy(metadashboard['static'] )
+    dashgen = metadashboard['generate']
+    cols = data_dicts[0].keys()
+    for choices in dashgen['level_choice']['keyvals'].values():
+        for idx, col in enumerate(cols, start=1):
+            if all(not r[col] or r[col] in choices for r in data_dicts):
+                chart = copy.deepcopy(dashgen['level_choice']['static'])
+                chart['title'] = title = col + '\N{RLM}'
+                chart['query'] = " ".join((
+                    dashgen['query']['preamble'],
+                    dashgen['query']['count_template'].format(
+                        field_name = '"' + col + '"'
+                    )
+                ))
+                xforms = chart['display']['transform']
+                xforms[IMPUTE]['keyvals'] = choices
+                xforms[CALC_SORTER]['calculate'] = (
+                    f"indexof({choices}, datum.what)+1 + '. ' + datum.what"
+                )
+                chart['display']['encoding']['color']['title'] = title
+                dashboard['charts'][f'c{idx}'] = chart
+                
+    
+    metadata['plugins']['datasette-dashboards'] = {
+        metadashboard['name']: dashboard
+    }
+    with open(name, 'wt') as out:
+        yaml.dump(metadata, out)
+    
 
 if __name__ == "__main__":
     import sys
