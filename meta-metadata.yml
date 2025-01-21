@@ -102,7 +102,7 @@ dashboard:
           ),
         t AS (SELECT COUNT(*) AS total_count FROM filtered),
         data AS (
-          SELECT filtered.* FROM filtered CROSS JOIN t WHERE total_count>20
+          SELECT filtered.* FROM filtered CROSS JOIN t WHERE total_count>5
         )
       count_template:
         SELECT {field_name} AS what, COUNT({field_name}) AS num
