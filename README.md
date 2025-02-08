@@ -3,6 +3,29 @@
 This project was started from the Datasette example for Glitch projects,
 but we're not going to use Glitch and we're moving further away.
 
+Usage here:
+
+We read the CSV file, and from it (and our meta-metadata.yml) generate a
+database and a metadata file.
+```console
+$ python read_data.py <csv-file>
+```
+Then we use these generated files to present things
+
+```console
+$ datasette sheelon.db -m metadata.yml
+```
+
+This will work if you [set up a user](https://datasette.io/plugins/datasette-auth-passwords) properly.
+But for development, you can use
+
+```console
+$ datasette --root sheelon.db -m metadata.yml
+```
+to log in as root with a token instead.
+
+<hr/>
+
 Text below this is the original Readme, and it includes references
 to the sources where this started -- of historical interest only.
 

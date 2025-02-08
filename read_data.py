@@ -70,7 +70,7 @@ def read_sheelon(reader):
                 last_t1 = t1
         else:
             t1 = last_t1
-        # "בחר/י" marks a series of boolean fields
+
         if ("רכיבי" in t1 or "מדד" in t1) and "מדדים" not in t1:
             header_row.append(SPECIAL_SEP.join((t1, t2)))
         else:
@@ -85,11 +85,6 @@ def write_db_table(db, table_name, csv_table):
     id_column = "row_number"
     id_provider = itertools.count(3)
 
-    # int_columns = {
-    #     name: int
-    #     for name in header
-    #     if name.startswith('שנות')
-    # }
     row_dicts = []
     for row in csv_table:
         d = {id_column: next(id_provider)}

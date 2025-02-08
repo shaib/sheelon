@@ -105,20 +105,6 @@ dashboard:
                COUNT("{field_name}") as cat_count
         FROM data
         GROUP BY category
-      ### This was used in a previous version, where there was a "select 3 from set" question
-      #
-      # count_template:
-      #   SELECT {field_name} AS what, COUNT({field_name}) AS num
-      #   FROM data
-      #   WHERE LENGTH(what)>1
-      #   GROUP BY what
-        
-      ### This was used in a previous version, where there was a "select 3 from set" question
-      #
-      # option_set_clause_template:
-      #   SELECT '{field_name}' AS what, SUM("{set_name}÷{field_name}") AS num
-      #   FROM data
-
       
     metrics:
       static:
@@ -128,18 +114,6 @@ dashboard:
         # insert query
         display:
           mark: { type: bar, tooltip: true }
-          # transform:
-          #   - calculate: "round(datum.pct * 1000)/10.0"
-          #     as: percent
-          #   - impute: pct
-          #     key: what
-          #     # keyvals to be inserted here
-          #     method: value
-          #     value: 0
-          #   - # 'calculate' to be inserted here
-          #     as: sorter
-          #   - calculate: "'‏' + datum.sorter"  # Note: the '' contains a RLM
-          #     as: sorterrtl
               
           encoding:
             x:
@@ -160,101 +134,3 @@ dashboard:
               field: category
               type: nominal
               legend: null
-
-#     level_choice:
-#       static:
-#         db: sheelon
-#         library: vega-lite
-#         # insert title
-#         # insert query
-#         display:
-#           mark: { type: bar, tooltip: true }
-#           transform:
-#             - impute: num
-#               key: what
-#               # keyvals to be inserted here
-#               method: value
-#               value: 0
-#             - # 'calculate' to be inserted here
-#               as: sorter
-#             - calculate: "'‏' + datum.sorter"  # Note: the '' contains a RLM
-#               as: sorterrtl
-#               
-#           encoding:
-#             x:
-#               field: num
-#               type: quantitative
-#               title: 'מספר'
-#               scale: {"domain": [0,240]}
-#             color:
-#               field: sorterrtl
-#               type: nominal
-#               # title to be inserted here
-#               legend:
-#                 direction: horizontal
-#                 orient: top
-# 
-#       keyvals:
-#         מידה:
-#           - "במידה מועטה מאוד או כלל לא"
-#           - "במידה מועטה"
-#           - "במידה בינונית"
-#           - "במידה רבה"
-#           - "במידה רבה מאוד"
-#         תדירות:
-#           - "בתדירות מועטה מאוד או כלל לא"
-#           - "בתדירות מועטה"
-#           - "בתדירות בינונית"
-#           - "בתדירות רבה"
-#           - "בתדירות רבה מאוד"
-#         איכות:
-#           - א. מצוינת
-#           - ב. טובה מאוד
-#           - ג. טובה
-#           - ד. סבירה
-#           - ה. לא טובה
-#         איכות גם:
-#           - א. מצוין
-#           - ב. טוב
-#           - ג. בינוני
-#           - ד. לא טוב
-#           - ה. כלל לא טוב
-# 
-#     option_set:
-#       static:
-#         db: sheelon
-#         library: vega-lite
-#         # insert title
-#         # insert query
-#         display:
-#           mark: { type: bar, tooltip: true }
-#           transform:
-#             - calculate: "replace(datum.what,
-#               'אחר (נא',
-#               '‏אחר (נא'
-#               )"
-#               # The replacement has a RLM, to make values that
-#               # start with this string last in order
-#               as: sorter
-#           encoding:
-#             y:
-#               field: num
-#               scale:
-#                 domain:
-#                   - 0
-#                   - 100
-#               title: 'מספר'
-#               type: quantitative
-#             x:
-#               field: sorter
-#               type: nominal
-#               # title to be inserted here
-#             color:
-#               field: sorter
-#               type: nominal
-#               # title to be inserted here
-#               legend:
-#                 direction: vertical
-#                 orient: top
-#                 # labelAlign: right
-#                 labelLimit: 320
