@@ -71,7 +71,7 @@ def read_sheelon(reader):
         else:
             t1 = last_t1
         # "בחר/י" marks a series of boolean fields
-        if "בחר/י" in t1:
+        if ("רכיבי" in t1 or "מדד" in t1) and "מדדים" not in t1:
             header_row.append(SPECIAL_SEP.join((t1, t2)))
         else:
             # Consider including t1 somehow... NON_SPECIAL_SEP?
@@ -82,31 +82,30 @@ def read_sheelon(reader):
 def write_db_table(db, table_name, csv_table):
     table = db[table_name]
     header = next(csv_table)
-    id_column = header[0]
+    id_column = "row_number"
+    id_provider = itertools.count(3)
 
-    # This is quite patchy...
-    bool_columns = {
-        name: bool
-        for name in header
-        if SPECIAL_SEP in name
-    }
-    int_columns = {
-        name: int
-        for name in header
-        if name.startswith('שנות')
-    }
+    # int_columns = {
+    #     name: int
+    #     for name in header
+    #     if name.startswith('שנות')
+    # }
+    row_dicts = []
+    for row in csv_table:
+        d = {id_column: next(id_provider)}
+        for name,val in zip(header,row):
+            if name in KILL_COLUMNS:
+                continue
+            if val:
+                val = float(val)
+                if val.is_integer():
+                    val = int(val)
+            else:
+                val = None
+            d[name] = val
+        row_dicts.append(d)
     
-    table.insert_all(
-        row_dicts := [
-            {
-                name: bool(val) if name in bool_columns else val.rstrip(",")
-                for name,val in zip(header,row)
-                if name not in KILL_COLUMNS
-            }
-            for row in csv_table
-        ],
-        pk=id_column, columns={**bool_columns, **int_columns}
-    )
+    table.insert_all(row_dicts, pk=id_column)
     return row_dicts
 
 
@@ -123,84 +122,50 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
     dashboard = copy.deepcopy(metadashboard['static'] )
     dashgen = metadashboard['generate']
     cols = data_dicts[0].keys()
-    for choices in dashgen['level_choice']['keyvals'].values():
-        for idx, col in enumerate(cols, start=1):
-            if all(not r[col] or r[col] in choices for r in data_dicts):
-                chart = copy.deepcopy(dashgen['level_choice']['static'])
-                chart['title'] = title = col + '\N{RLM}'
-                chart['query'] = " ".join((
-                    dashgen['query']['preamble'],
-                    dashgen['query']['count_template'].format(
-                        field_name = '"' + col + '"'
-                    )
-                ))
-                xforms = chart['display']['transform']
-                xforms[IMPUTE]['keyvals'] = choices
-                xforms[CALC_SORTER]['calculate'] = (
-                    f"indexof({choices}, datum.what)+1 + '. ' + datum.what"
-                )
-                chart['display']['encoding']['color']['title'] = title
-                dashboard['charts'][f'c-{idx:02d}'] = chart
-
-    option_sets = get_option_sets(cols)
-    for set_name,options,col_idx in option_sets:
-        chart = copy.deepcopy(dashgen['option_set']['static'])
-        chart['title'] = title = set_name + '\N{RLM}'
-        query = " UNION ALL ".join(
-            dashgen['query']['option_set_clause_template'].format(
-                field_name=option,
-                set_name=set_name
-            )
-            for option in options
-        )
-        chart['query'] = " ".join(
-            (dashgen['query']['preamble'], query)
-        )
-        chart['display']['encoding']['color']['title'] = title
-        chart['display']['encoding']['x']['title'] = title
-        dashboard['charts'][f'c-{col_idx:02d}'] = chart
-
-    dashboard['layout'].extend(
-        pairs(
-            f'c-{j:02d}' for j in range(len(cols))
-            if f'c-{j:02d}' in dashboard['charts']
-        )
+    metrics = [
+        col for col in cols if SPECIAL_SEP not in col and col.startswith('מדד')
+    ]
+    metrics_query = " UNION ALL ".join(
+        dashgen['query']['main_metric_clause_template'].format(field_name=metric)
+        for metric in metrics
     )
+    metrics_chart = copy.deepcopy(dashgen['metrics']['static'])
+    metrics_chart['query'] = " ".join(
+        (dashgen['query']['preamble'], metrics_query)
+    )
+    dashboard['charts']['main_metrics'] = metrics_chart
+    
+    for idx, metric in enumerate(metrics, start=1):
+        sub_metrics = [
+            col for col in cols 
+            if SPECIAL_SEP in col and (
+                col.startswith(metric) or
+                col.startswith(metric.replace('מדד', 'רכיבי'))
+            )
+        ]
+        sub_metrics_query = " UNION ALL ".join(
+            dashgen['query']['sub_metric_clause_template'].format(
+                # Note replaces to double the quotes -- this is very poor man's SQL quoting
+                field_name=sub_metric.replace('"', '""'),
+                sub_field_name=sub_metric.split(SPECIAL_SEP)[1].replace("'", "''")
+            )
+            for sub_metric in sub_metrics
+        )
+        sub_metrics_chart = copy.deepcopy(dashgen['metrics']['static'])
+        sub_metrics_chart['title'] = metric
+        sub_metrics_chart['query'] = " ".join(
+            (dashgen['query']['preamble'], sub_metrics_query)
+        )
+        dashboard['charts'][f'm-{idx:02d}'] = sub_metrics_chart
+        dashboard['layout'].append(['.', f'm-{idx:02d}'])
+
+        
     metadata['plugins']['datasette-dashboards'] = {
         metadashboard['name']: dashboard
     }
     with open(name, 'wt') as out:
         yaml.safe_dump(metadata, out)
 
-
-def get_option_sets(cols):
-    set_name, options, col_idx = None, [], 0
-    for idx, col in enumerate(cols, start=1):
-        if SPECIAL_SEP not in col:
-            if set_name:
-                # A set ended
-                yield set_name, options, col_idx
-                set_name, options, col_idx = None, [], 0
-            # Either way, nothing more to process here
-            continue
-        # col is a split name
-        title,option = col.split(SPECIAL_SEP)
-        if set_name:
-            if title == set_name:
-                # Another member of existing set
-                options.append(option)
-            else:
-                # A set ended, and a new one starts
-                yield set_name, options, col_idx
-                set_name, options, col_idx = title, [option], idx
-        else:
-            # A set is starting after non-set
-            set_name, options, col_idx = title, [option], idx
-
-
-def pairs(seq, fill='.'):
-    i = iter(seq)
-    return itertools.zip_longest(i, i, fillvalue=fill)
 
 if __name__ == "__main__":
     import sys

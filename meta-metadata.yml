@@ -30,183 +30,231 @@ dashboard:
       a_gender:
         name: מגדר
         type: select
-        options: [גבר, אישה, מעדיף/ה לא לציין]
-      b_gen_expr_low:
+        options: ["1", "2", "3"]
+      b_vetekedu_low:
         name: מינ ותק בחינוך
         type: number
         min: 0
         max: 100
         step: 1
-      c_gen_expr_high:
+      c_vetekedu_high:
         name: מקס ותק בחינוך
         type: number
         min: 0
         max: 100
         step: 1
-      d_local_expr_low:
-        name: מינ ותק בחינוך במ״א אשכול
+      d_vetekhoraa_low:
+        name: מינ ותק בהוראה
         type: number
         min: 0
         max: 100
         step: 1
-      e_local_expr_high:
-        name: מקס ותק בחינוך במ״א אשכול
+      e_vetekhoraa_high:
+        name: מקס ותק בהוראה
         type: number
         min: 0
         max: 100
         step: 1
-      f_position:
+      f_tafkid:
         name: תפקיד
         type: select
-        options:
-          - יועץ/ת
-          - מורה מקצוע
-          - מורה/ת שילוב
-          - מחנכ/ת
-          - מתנדב/ת
-          - סייע/ת גיל הרך
-          - סייע/ת חינוך מיוחד
-          - תומך/ת הוראה
+        options: ['1', '2', '3', '4', '5', '6', '7', '8', '9']
       g_school:
         name: בית ספר
         type: select
-        options:
-          - מרחבי אשכול
-          - נופי הבשור
-          - נעם נצרים בנות
-          - נעם נצרים בנים
-          - קידום הנוער
-          - שדות אשכול
-          - שחר אשכול
+        options: ['1', '2', '3', '4', '5', '6', '7']
+
     charts:
       t1:
         library: markdown
         display: |-
           # שאלון שלומות
-          > תיכף נראה מה זה זה
+          > על בסיס שאלון מעובד
     layout:
       - [t1, '.']
+      - [main_metrics, '.']
           
   generate:
     query:
       preamble: WITH
         filtered AS (
           SELECT * FROM sheelon WHERE TRUE
-            [[ AND "מגדר" = :a_gender ]]
-            [[ AND "שנות ותק בחינוך/בהוראה" >= :b_gen_expr_low ]]
-            [[ AND "שנות ותק בחינוך/בהוראה" <= :c_gen_expr_high ]]
-            [[ AND "שנות וותק במערכת החינוך במועצה איזורית אשכול" >= :d_local_expr_low ]]
-            [[ AND "שנות וותק במערכת החינוך במועצה איזורית אשכול" <= :e_local_expr_high ]]
-            [[ AND "תפקידך במערכת החינוך:" = :f_position ]]
-            [[ AND "שם בית הספר" = :g_school ]]
+            [[ AND "SEX" = :a_gender ]]
+            [[ AND "VETEKEDU" >= :b_vetekedu_low ]]
+            [[ AND "VETEKEDU" <= :c_vetekedu_high ]]
+            [[ AND "VETEKHORAA"  >= :d_vetekhoraa_low ]]
+            [[ AND "VETEKHORAA"  <= :e_vetekhoraa_high ]]
+            [[ AND "TAFKID" = :f_tafkid ]]
+            [[ AND "SCHOOL" = :g_school ]]
           ),
         t AS (SELECT COUNT(*) AS total_count FROM filtered),
         data AS (
           SELECT filtered.* FROM filtered CROSS JOIN t WHERE total_count>5
         )
-      count_template:
-        SELECT {field_name} AS what, COUNT({field_name}) AS num
+      main_metric_clause_template:
+        SELECT '{field_name}' AS what, 
+               (SELECT SUM(IIF("{field_name}" = 3, 1., 0.)) / COUNT("{field_name}") FROM data) AS top_pct,
+               "{field_name}" AS category,
+               COUNT("{field_name}") as cat_count
         FROM data
-        WHERE LENGTH(what)>1
-        GROUP BY what
-      option_set_clause_template:
-        SELECT '{field_name}' AS what, SUM("{set_name}÷{field_name}") AS num
+        GROUP BY category
+      sub_metric_clause_template:
+        SELECT '{sub_field_name}' AS what, 
+               (SELECT SUM(IIF("{field_name}" = 3, 1., 0.)) / COUNT("{field_name}") FROM data) AS top_pct,
+               "{field_name}" AS category,
+               COUNT("{field_name}") as cat_count
         FROM data
+        GROUP BY category
+      ### This was used in a previous version, where there was a "select 3 from set" question
+      #
+      # count_template:
+      #   SELECT {field_name} AS what, COUNT({field_name}) AS num
+      #   FROM data
+      #   WHERE LENGTH(what)>1
+      #   GROUP BY what
+        
+      ### This was used in a previous version, where there was a "select 3 from set" question
+      #
+      # option_set_clause_template:
+      #   SELECT '{field_name}' AS what, SUM("{set_name}÷{field_name}") AS num
+      #   FROM data
 
-    level_choice:
+      
+    metrics:
       static:
         db: sheelon
         library: vega-lite
-        # insert title
+        title: מדדי שלומות  # default, for main
         # insert query
         display:
           mark: { type: bar, tooltip: true }
-          transform:
-            - impute: num
-              key: what
-              # keyvals to be inserted here
-              method: value
-              value: 0
-            - # 'calculate' to be inserted here
-              as: sorter
-            - calculate: "'‏' + datum.sorter"  # Note: the '' contains a RLM
-              as: sorterrtl
+          # transform:
+          #   - calculate: "round(datum.pct * 1000)/10.0"
+          #     as: percent
+          #   - impute: pct
+          #     key: what
+          #     # keyvals to be inserted here
+          #     method: value
+          #     value: 0
+          #   - # 'calculate' to be inserted here
+          #     as: sorter
+          #   - calculate: "'‏' + datum.sorter"  # Note: the '' contains a RLM
+          #     as: sorterrtl
               
           encoding:
             x:
-              field: num
+              field: cat_count
               type: quantitative
-              title: 'מספר'
-              scale: {"domain": [0,240]}
-            color:
-              field: sorterrtl
+              title: 'אחוז בקטגוריה'
+              # scale: {"domain": [0.,100.]}
+              stack: normalize
+            y:
+              field: what
               type: nominal
-              # title to be inserted here
+              title: מדד
+              sort: { "field": top_pct, op: "mean", order: "descending" }
               legend:
                 direction: horizontal
                 orient: top
-
-      keyvals:
-        מידה:
-          - "במידה מועטה מאוד או כלל לא"
-          - "במידה מועטה"
-          - "במידה בינונית"
-          - "במידה רבה"
-          - "במידה רבה מאוד"
-        תדירות:
-          - "בתדירות מועטה מאוד או כלל לא"
-          - "בתדירות מועטה"
-          - "בתדירות בינונית"
-          - "בתדירות רבה"
-          - "בתדירות רבה מאוד"
-        איכות:
-          - א. מצוינת
-          - ב. טובה מאוד
-          - ג. טובה
-          - ד. סבירה
-          - ה. לא טובה
-        איכות גם:
-          - א. מצוין
-          - ב. טוב
-          - ג. בינוני
-          - ד. לא טוב
-          - ה. כלל לא טוב
-
-    option_set:
-      static:
-        db: sheelon
-        library: vega-lite
-        # insert title
-        # insert query
-        display:
-          mark: { type: bar, tooltip: true }
-          transform:
-            - calculate: "replace(datum.what,
-              'אחר (נא',
-              '‏אחר (נא'
-              )"
-              # The replacement has a RLM, to make values that
-              # start with this string last in order
-              as: sorter
-          encoding:
-            y:
-              field: num
-              scale:
-                domain:
-                  - 0
-                  - 100
-              title: 'מספר'
-              type: quantitative
-            x:
-              field: sorter
-              type: nominal
-              # title to be inserted here
             color:
-              field: sorter
+              field: category
               type: nominal
-              # title to be inserted here
-              legend:
-                direction: vertical
-                orient: top
-                # labelAlign: right
-                labelLimit: 320
+              legend: null
+
+#     level_choice:
+#       static:
+#         db: sheelon
+#         library: vega-lite
+#         # insert title
+#         # insert query
+#         display:
+#           mark: { type: bar, tooltip: true }
+#           transform:
+#             - impute: num
+#               key: what
+#               # keyvals to be inserted here
+#               method: value
+#               value: 0
+#             - # 'calculate' to be inserted here
+#               as: sorter
+#             - calculate: "'‏' + datum.sorter"  # Note: the '' contains a RLM
+#               as: sorterrtl
+#               
+#           encoding:
+#             x:
+#               field: num
+#               type: quantitative
+#               title: 'מספר'
+#               scale: {"domain": [0,240]}
+#             color:
+#               field: sorterrtl
+#               type: nominal
+#               # title to be inserted here
+#               legend:
+#                 direction: horizontal
+#                 orient: top
+# 
+#       keyvals:
+#         מידה:
+#           - "במידה מועטה מאוד או כלל לא"
+#           - "במידה מועטה"
+#           - "במידה בינונית"
+#           - "במידה רבה"
+#           - "במידה רבה מאוד"
+#         תדירות:
+#           - "בתדירות מועטה מאוד או כלל לא"
+#           - "בתדירות מועטה"
+#           - "בתדירות בינונית"
+#           - "בתדירות רבה"
+#           - "בתדירות רבה מאוד"
+#         איכות:
+#           - א. מצוינת
+#           - ב. טובה מאוד
+#           - ג. טובה
+#           - ד. סבירה
+#           - ה. לא טובה
+#         איכות גם:
+#           - א. מצוין
+#           - ב. טוב
+#           - ג. בינוני
+#           - ד. לא טוב
+#           - ה. כלל לא טוב
+# 
+#     option_set:
+#       static:
+#         db: sheelon
+#         library: vega-lite
+#         # insert title
+#         # insert query
+#         display:
+#           mark: { type: bar, tooltip: true }
+#           transform:
+#             - calculate: "replace(datum.what,
+#               'אחר (נא',
+#               '‏אחר (נא'
+#               )"
+#               # The replacement has a RLM, to make values that
+#               # start with this string last in order
+#               as: sorter
+#           encoding:
+#             y:
+#               field: num
+#               scale:
+#                 domain:
+#                   - 0
+#                   - 100
+#               title: 'מספר'
+#               type: quantitative
+#             x:
+#               field: sorter
+#               type: nominal
+#               # title to be inserted here
+#             color:
+#               field: sorter
+#               type: nominal
+#               # title to be inserted here
+#               legend:
+#                 direction: vertical
+#                 orient: top
+#                 # labelAlign: right
+#                 labelLimit: 320
