@@ -152,7 +152,13 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
             (dashgen['query']['preamble'], sub_metrics_query)
         )
         dashboard['charts'][f'm-{idx:02d}'] = sub_metrics_chart
-        dashboard['layout'].append(['.', f'm-{idx:02d}'])
+
+    dashboard['layout'].extend(
+        pairs(
+            f'm-{j:02d}' for j in range(len(metrics)+1)
+            if f'm-{j:02d}' in dashboard['charts']
+        )
+    )
 
         
     metadata['plugins']['datasette-dashboards'] = {
@@ -161,6 +167,9 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
     with open(name, 'wt') as out:
         yaml.safe_dump(metadata, out)
 
+def pairs(seq, fill='.'):
+    i = iter(seq)
+    return itertools.zip_longest(i, i, fillvalue=fill)
 
 if __name__ == "__main__":
     import sys
