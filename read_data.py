@@ -51,6 +51,7 @@ def read_sheelon(reader):
         row1 = next(reader)
         row2 = next(reader)
     except OSError:
+        # TODO: Bug, csvfile_name not available in this function
         raise InvocationError(f"Cannot read header from '{csvfile_name}'")
 
     if len(row1)!=len(row2):
