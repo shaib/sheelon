@@ -165,7 +165,7 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
         metadashboard['name']: dashboard
     }
     with open(name, 'wt') as out:
-        yaml.safe_dump(metadata, out)
+        yaml.safe_dump(metadata, out, allow_unicode=True)
 
 def pairs(seq, fill='.'):
     i = iter(seq)
