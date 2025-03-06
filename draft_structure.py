@@ -40,6 +40,8 @@ def guess_structure(reader):
 
     structure = {NO_SECTION: {}}
     for col_no, (t1, t2) in enumerate(zip(row1, row2)):
+        t1 = onespace(t1)
+        t2 = onespace(t2)
         
         if not t2 or "Response" in t2:
             # Question is in row 1
@@ -77,6 +79,14 @@ def guess_structure(reader):
             structure[section][t2] = guess_type_from_responses(responses)
 
     return structure
+
+
+def onespace(t: str):
+    "Normalize whitespace within string t"
+    if t:
+        return " ".join(t.split())
+    else:
+        return t
 
 
 def guess_type_from_responses(responses: set):
