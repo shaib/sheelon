@@ -7,27 +7,20 @@ import csv
 import itertools
 import sys
 
+import click
 import yaml
 
 
 NO_SECTION = "-שאלות נוספות-"
 
 
-def main(argv: list[str]):
-    # "arg parsing"
-    if len(argv)!=1:
-        raise InvocationError("Required single arg: csvfile-name")
-    csvfile_name = argv[0]
+@click.command()
+@click.argument('csvfile', type=click.File('r', encoding='utf-8'))
+def main(csvfile):
+    reader = csv.reader(csvfile)
+    structure = guess_structure(reader)
+    yaml.safe_dump(structure, sys.stdout, allow_unicode=True)
 
-    try:
-        # Open the CSV file
-        with open(csvfile_name, newline='', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            structure = guess_structure(reader)
-            yaml.safe_dump(structure, sys.stdout, allow_unicode=True)
-
-    except OSError:
-        raise InvocationError(f"Cannot read csv file '{csvfile_name}'")
 
 
 def guess_structure(reader):
@@ -109,4 +102,4 @@ def guess_type_from_responses(responses: set):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()

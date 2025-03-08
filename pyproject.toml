@@ -5,6 +5,7 @@ description = "Presentation of the well-being questionnaire data"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "click>=8.1.8",
     "datasette>=0.65.1",
     "datasette-auth-passwords>=1.1.1",
     "datasette-dashboards>=0.7.0",

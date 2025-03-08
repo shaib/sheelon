@@ -2,6 +2,7 @@ import copy
 import csv
 import itertools
 
+import click
 import yaml
 from sqlite_utils import Database
 
@@ -22,28 +23,30 @@ KILL_COLUMNS = (
 )
 
 
-def main(argv: list[str], db_name="sheelon.db", table_name="sheelon"):
+@click.command()
+@click.argument('csvfile', type=click.File('r', encoding='utf-8'))
+@click.argument('metadata-name', default="metadata.yml")
+@click.option('-P', '--meta-prefix',
+              default="meta-", show_default=True,
+              help="Prefix for file describing how to build metadata file")
+@click.option('-t', '--table-name', default='sheelon', show_default=True,
+              help="Name of table to create and place the data in")
+@click.option('-D', '--db-name',
+              type=click.Path(dir_okay=False, writable=True),
+              default='sheelon.db',
+              help="Name of database file to place the data in")
+def main(csvfile, db_name, table_name, metadata_name, meta_prefix):
     # "arg parsing"
-    if len(argv)!=1:
-        raise InvocationError("Required single arg: csvfile-name")
-    csvfile_name = argv[0]
-    
+
     try:
-        # Open the CSV file
-        f = open(csvfile_name, newline='', encoding='utf-8')
+        db = Database(db_name, recreate=True)
     except OSError:
-        raise InvocationError(f"Cannot read csv file '{csvfile_name}'")
+        raise InvocationError(f"Cannot use '{db_name}' as a database file")
 
-    with f:
-        try:
-            db = Database(db_name, recreate=True)
-        except OSError:
-            raise InvocationError(f"Cannot use '{db_name}' as a database file")
-
-        reader = csv.reader(f)
-        csv_table = read_sheelon(reader)
-        csv_rows = write_db_table(db, table_name, csv_table)
-        make_metadata_yml(csv_rows)
+    reader = csv.reader(csvfile)
+    csv_table = read_sheelon(reader)
+    csv_rows = write_db_table(db, table_name, csv_table)
+    make_metadata_yml(csv_rows, name=metadata_name, prefix=meta_prefix)
     
 
 def read_sheelon(reader):
@@ -111,8 +114,12 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
     CALC_SORTER = 1
     
     source_name = prefix+name
-    with open(source_name) as f:
-        meta_meta = yaml.safe_load(f)
+    try:
+        with open(source_name) as f:
+            meta_meta = yaml.safe_load(f)
+    except IOError:
+        raise InvocationError(f"Cannot read file '{source_name}' to make '{name}'")
+
     metadata = meta_meta['preamble']
     metadashboard = meta_meta['dashboard']
     dashboard = copy.deepcopy(metadashboard['static'] )
@@ -173,5 +180,4 @@ def pairs(seq, fill='.'):
     return itertools.zip_longest(i, i, fillvalue=fill)
 
 if __name__ == "__main__":
-    import sys
-    main(sys.argv[1:])
+    main()
