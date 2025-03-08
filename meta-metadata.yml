@@ -134,6 +134,6 @@ dashboard:
               field: category
               type: ordinal
               legend: null
-              scale: {
-                domain: [1, 2, 3],
-                range: ["#c71212", "#faf614", "#1dc70e"]}
+              scale:
+                domain: [1, 2, 3]
+                range: ["#c71212", "#faf614", "#1dc70e"]
