@@ -117,16 +117,8 @@ def write_db_table(db, table_name, csv_table):
 def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-",
                       db_name="sheelon", table_name="sheelon"):
 
-    IMPUTE = 0
-    CALC_SORTER = 1
-    
-    source_name = prefix+name
-    try:
-        with open(source_name) as f:
-            meta_meta = yaml.safe_load(f)
-    except IOError:
-        raise InvocationError(f"Cannot read file '{source_name}' to make '{name}'")
-
+    meta_meta = read_meta_meta(prefix, name)
+    # Start generating
     metadata = meta_meta['preamble']
     # Forbid direct access to table
     metadata['databases'] = {
@@ -134,27 +126,22 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-",
             'tables': {
                 table_name: {
                     'allow': False
-                }
-            }
-        }
-    }
+    }}}}
     metadashboard = meta_meta['dashboard']
     dashboard = copy.deepcopy(metadashboard['static'] )
     dashgen = metadashboard['generate']
     chart_base = dashgen['metrics']['static']
-    chart_base['db'] = db_name
+    chart_base['db'] = db_name  # install db_name in source to be copied
     query_preamble = dashgen['query']['preamble_template'].format(table_name=table_name)
+
     cols = data_dicts[0].keys()
     metrics = [
         col for col in cols if SPECIAL_SEP not in col and col.startswith('מדד')
     ]
-    metrics_query = " UNION ALL ".join(
-        dashgen['query']['main_metric_clause_template'].format(field_name=metric)
-        for metric in metrics
+    dashboard['charts']['main_metrics'] = make_metric_chart(
+        metrics, dashgen['query']['main_metric_clause_template'],
+        chart_base, query_preamble
     )
-    metrics_chart = copy.deepcopy(chart_base)
-    metrics_chart['query'] = " ".join((query_preamble, metrics_query))
-    dashboard['charts']['main_metrics'] = metrics_chart
     
     for idx, metric in enumerate(metrics, start=1):
         sub_metrics = [
@@ -164,17 +151,11 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-",
                 col.startswith(metric.replace('מדד', 'רכיבי'))
             )
         ]
-        sub_metrics_query = " UNION ALL ".join(
-            dashgen['query']['sub_metric_clause_template'].format(
-                # Note replaces to double the quotes -- this is very poor man's SQL quoting
-                field_name=sub_metric.replace('"', '""'),
-                sub_field_name=sub_metric.split(SPECIAL_SEP)[1].replace("'", "''")
-            )
-            for sub_metric in sub_metrics
+        sub_metrics_chart = make_sub_metric_chart(
+            sub_metrics, dashgen['query']['sub_metric_clause_template'],
+            chart_base, query_preamble
         )
-        sub_metrics_chart = copy.deepcopy(chart_base)
         sub_metrics_chart['title'] = metric
-        sub_metrics_chart['query'] = " ".join((query_preamble, sub_metrics_query))
         dashboard['charts'][f'm-{idx:02d}'] = sub_metrics_chart
 
     dashboard['layout'].extend(
@@ -183,13 +164,48 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-",
             if f'm-{j:02d}' in dashboard['charts']
         )
     )
-
         
     metadata['plugins']['datasette-dashboards'] = {
         metadashboard['name']: dashboard
     }
     with open(name, 'wt') as out:
         yaml.safe_dump(metadata, out, allow_unicode=True)
+
+
+def read_meta_meta(prefix, name):
+    source_name = prefix+name
+    try:
+        with open(source_name) as f:
+            meta_meta = yaml.safe_load(f)
+            return meta_meta
+    except IOError:
+        raise InvocationError(f"Cannot read file '{source_name}' to make '{name}'")
+
+
+def make_metric_chart(metrics, metric_clause_template, chart_base, query_preamble):
+    metrics_query = " UNION ALL ".join(
+        metric_clause_template.format(field_name=metric)
+        for metric in metrics
+    )
+    metrics_chart = copy.deepcopy(chart_base)
+    metrics_chart['query'] = " ".join((query_preamble, metrics_query))
+    return metrics_chart
+
+
+def make_sub_metric_chart(sub_metrics, sub_metric_clause_template,
+                          chart_base, query_preamble):
+    sub_metrics_query = " UNION ALL ".join(
+        sub_metric_clause_template.format(
+            # Note replaces to double the quotes -- this is very poor man's SQL quoting
+            field_name=sub_metric.replace('"', '""'),
+            sub_field_name=sub_metric.split(SPECIAL_SEP)[1].replace("'", "''")
+        )
+        for sub_metric in sub_metrics
+    )
+    sub_metrics_chart = copy.deepcopy(chart_base)
+    sub_metrics_chart['query'] = " ".join((query_preamble, sub_metrics_query))
+    return sub_metrics_chart
+
 
 def pairs(seq, fill='.'):
     i = iter(seq)
