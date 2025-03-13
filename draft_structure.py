@@ -11,10 +11,12 @@ import click
 import yaml
 
 
+CLICK_CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+
 NO_SECTION = "-שאלות נוספות-"
 
 
-@click.command()
+@click.command(context_settings=CLICK_CONTEXT_SETTINGS)
 @click.argument('csvfile', type=click.File('r', encoding='utf-8'))
 def main(csvfile):
     reader = csv.reader(csvfile)

@@ -21,9 +21,11 @@ KILL_COLUMNS = (
     "Last Name",
     "Custom Data 1",
 )
+CLICK_CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 
-@click.command()
+
+@click.command(context_settings=CLICK_CONTEXT_SETTINGS)
 @click.argument('csvfile', type=click.File('r', encoding='utf-8'))
 @click.argument('metadata-name', default="metadata.yml")
 @click.option('-P', '--meta-prefix',
