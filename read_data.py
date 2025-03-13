@@ -1,6 +1,7 @@
 import copy
 import csv
 import itertools
+from pathlib import Path
 
 import click
 import yaml
@@ -48,7 +49,10 @@ def main(csvfile, db_name, table_name, metadata_name, meta_prefix):
     reader = csv.reader(csvfile)
     csv_table = read_sheelon(reader)
     csv_rows = write_db_table(db, table_name, csv_table)
-    make_metadata_yml(csv_rows, name=metadata_name, prefix=meta_prefix)
+    make_metadata_yml(
+        csv_rows, name=metadata_name, prefix=meta_prefix,
+        db_name=Path(db_name).stem, table_name=table_name
+    )
     
 
 def read_sheelon(reader):
@@ -110,7 +114,8 @@ def write_db_table(db, table_name, csv_table):
     return row_dicts
 
 
-def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
+def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-",
+                      db_name="sheelon", table_name="sheelon"):
 
     IMPUTE = 0
     CALC_SORTER = 1
@@ -123,9 +128,22 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
         raise InvocationError(f"Cannot read file '{source_name}' to make '{name}'")
 
     metadata = meta_meta['preamble']
+    # Forbid direct access to table
+    metadata['databases'] = {
+        db_name: {
+            'tables': {
+                table_name: {
+                    'allow': False
+                }
+            }
+        }
+    }
     metadashboard = meta_meta['dashboard']
     dashboard = copy.deepcopy(metadashboard['static'] )
     dashgen = metadashboard['generate']
+    chart_base = dashgen['metrics']['static']
+    chart_base['db'] = db_name
+    query_preamble = dashgen['query']['preamble_template'].format(table_name=table_name)
     cols = data_dicts[0].keys()
     metrics = [
         col for col in cols if SPECIAL_SEP not in col and col.startswith('מדד')
@@ -134,10 +152,8 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
         dashgen['query']['main_metric_clause_template'].format(field_name=metric)
         for metric in metrics
     )
-    metrics_chart = copy.deepcopy(dashgen['metrics']['static'])
-    metrics_chart['query'] = " ".join(
-        (dashgen['query']['preamble'], metrics_query)
-    )
+    metrics_chart = copy.deepcopy(chart_base)
+    metrics_chart['query'] = " ".join((query_preamble, metrics_query))
     dashboard['charts']['main_metrics'] = metrics_chart
     
     for idx, metric in enumerate(metrics, start=1):
@@ -156,11 +172,9 @@ def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-"):
             )
             for sub_metric in sub_metrics
         )
-        sub_metrics_chart = copy.deepcopy(dashgen['metrics']['static'])
+        sub_metrics_chart = copy.deepcopy(chart_base)
         sub_metrics_chart['title'] = metric
-        sub_metrics_chart['query'] = " ".join(
-            (dashgen['query']['preamble'], sub_metrics_query)
-        )
+        sub_metrics_chart['query'] = " ".join((query_preamble, sub_metrics_query))
         dashboard['charts'][f'm-{idx:02d}'] = sub_metrics_chart
 
     dashboard['layout'].extend(

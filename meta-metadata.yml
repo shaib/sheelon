@@ -5,7 +5,9 @@ preamble:
     <ul>
       <li>זוהי גרסה ראשונית בלבד</li>
     </ul>
+
   databases:
+    # This part is replaced with real db and table names
     sheelon:
       tables:
         sheelon:
@@ -76,9 +78,9 @@ dashboard:
           
   generate:
     query:
-      preamble: WITH
+      preamble_template: WITH
         filtered AS (
-          SELECT * FROM sheelon WHERE TRUE
+          SELECT * FROM "{table_name}" WHERE TRUE
             [[ AND "SEX" = :a_gender ]]
             [[ AND "VETEKEDU" >= :b_vetekedu_low ]]
             [[ AND "VETEKEDU" <= :c_vetekedu_high ]]
@@ -108,7 +110,7 @@ dashboard:
       
     metrics:
       static:
-        db: sheelon
+        # db: sheelon # now set dynamically
         library: vega-lite
         title: מדדי שלומות  # default, for main
         # insert query
