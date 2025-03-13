@@ -49,10 +49,11 @@ def main(csvfile, db_name, table_name, metadata_name, meta_prefix):
     reader = csv.reader(csvfile)
     csv_table = read_sheelon(reader)
     csv_rows = write_db_table(db, table_name, csv_table)
-    make_metadata_yml(
-        csv_rows, name=metadata_name, prefix=meta_prefix,
+    meta_maker = MetadataWriter(
+        name=metadata_name, prefix=meta_prefix,
         db_name=Path(db_name).stem, table_name=table_name
     )
+    meta_maker.make_for_columns(csv_rows[0].keys())
     
 
 def read_sheelon(reader):
@@ -114,62 +115,102 @@ def write_db_table(db, table_name, csv_table):
     return row_dicts
 
 
-def make_metadata_yml(data_dicts, name="metadata.yml", prefix="meta-",
-                      db_name="sheelon", table_name="sheelon"):
+class MetadataWriter:
+    """
+    Write a metadata file for datasette based on meta-metadata
+    definitions, and the data itself
+    """
+    def __init__(self,
+                 name="metadata.yml", prefix="meta-",
+                 db_name="sheelon", table_name="sheelon"):
+        # Read and prepare meta-metadata for use later
+        meta_meta = read_meta_meta(prefix, name)
+        metadashboard = meta_meta['dashboard']
+        dashgen = self.dashgen = metadashboard['generate']
+        self.chart_base = dashgen['metrics']['static']
+        self.chart_base['db'] = db_name  # install db_name in source to be copied
+        self.query_preamble = (
+            dashgen['query']['preamble_template'].format(table_name=table_name)
+        )
+        self.out_file_name = name
+        self.dashboard_name = metadashboard['name']
+        # Start creating metadata
+        self.metadata = meta_meta['preamble']
+        self.metadata['databases'] = {
+            db_name: {
+                'tables': {
+                    table_name: {
+                        'allow': False
+        }}}}
+        self.dashboard = copy.deepcopy(metadashboard['static'] )
 
-    meta_meta = read_meta_meta(prefix, name)
-    # Start generating
-    metadata = meta_meta['preamble']
-    # Forbid direct access to table
-    metadata['databases'] = {
-        db_name: {
-            'tables': {
-                table_name: {
-                    'allow': False
-    }}}}
-    metadashboard = meta_meta['dashboard']
-    dashboard = copy.deepcopy(metadashboard['static'] )
-    dashgen = metadashboard['generate']
-    chart_base = dashgen['metrics']['static']
-    chart_base['db'] = db_name  # install db_name in source to be copied
-    query_preamble = dashgen['query']['preamble_template'].format(table_name=table_name)
+    def make_for_columns(self, cols):
+        self.generate_charts(cols)
+        self.extend_layout()
+        self.set_dashboard(self.dashboard_name)
+        self.write_file()
 
-    cols = data_dicts[0].keys()
-    metrics = [
-        col for col in cols if SPECIAL_SEP not in col and col.startswith('מדד')
-    ]
-    dashboard['charts']['main_metrics'] = make_metric_chart(
-        metrics, dashgen['query']['main_metric_clause_template'],
-        chart_base, query_preamble
-    )
-    
-    for idx, metric in enumerate(metrics, start=1):
-        sub_metrics = [
-            col for col in cols 
-            if SPECIAL_SEP in col and (
-                col.startswith(metric) or
-                col.startswith(metric.replace('מדד', 'רכיבי'))
-            )
+    def generate_charts(self, cols):
+        metrics = [
+            col for col in cols if SPECIAL_SEP not in col and col.startswith('מדד')
         ]
-        sub_metrics_chart = make_sub_metric_chart(
-            sub_metrics, dashgen['query']['sub_metric_clause_template'],
-            chart_base, query_preamble
+        self.dashboard['charts']['main_metrics'] = self.make_metric_chart(
+            metrics, self.dashgen['query']['main_metric_clause_template'],
         )
-        sub_metrics_chart['title'] = metric
-        dashboard['charts'][f'm-{idx:02d}'] = sub_metrics_chart
 
-    dashboard['layout'].extend(
-        pairs(
-            f'm-{j:02d}' for j in range(len(metrics)+1)
-            if f'm-{j:02d}' in dashboard['charts']
+        for idx, metric in enumerate(metrics, start=1):
+            sub_metrics = [
+                col for col in cols
+                if SPECIAL_SEP in col and (
+                    col.startswith(metric) or
+                    col.startswith(metric.replace('מדד', 'רכיבי'))
+                )
+            ]
+            sub_metrics_chart = self.make_sub_metric_chart(
+                sub_metrics, self.dashgen['query']['sub_metric_clause_template'],
+            )
+            sub_metrics_chart['title'] = metric
+            self.dashboard['charts'][f'm-{idx:02d}'] = sub_metrics_chart
+
+    def extend_layout(self):
+        self.dashboard['layout'].extend(
+            pairs(
+                f'm-{j:02d}' for j in range(len(self.dashboard['charts']))
+                if f'm-{j:02d}' in self.dashboard['charts']
+            )
         )
-    )
-        
-    metadata['plugins']['datasette-dashboards'] = {
-        metadashboard['name']: dashboard
-    }
-    with open(name, 'wt') as out:
-        yaml.safe_dump(metadata, out, allow_unicode=True)
+
+    def set_dashboard(self, dashboard_name):
+        dashboards = self.metadata['plugins'].setdefault('datasette-dashboards', {})
+        dashboards[dashboard_name] = self.dashboard
+
+    def write_file(self):
+        with open(self.out_file_name, 'wt') as out:
+            yaml.safe_dump(self.metadata, out, allow_unicode=True)
+
+
+    def make_metric_chart(self, metrics, metric_clause_template):
+        metrics_query = " UNION ALL ".join(
+            metric_clause_template.format(field_name=metric)
+            for metric in metrics
+        )
+        metrics_chart = copy.deepcopy(self.chart_base)
+        metrics_chart['query'] = " ".join((self.query_preamble, metrics_query))
+        return metrics_chart
+
+
+    def make_sub_metric_chart(self, sub_metrics, sub_metric_clause_template):
+        sub_metrics_query = " UNION ALL ".join(
+            sub_metric_clause_template.format(
+                # Note replaces to double the quotes -- this is very poor man's SQL quoting
+                field_name=sub_metric.replace('"', '""'),
+                sub_field_name=sub_metric.split(SPECIAL_SEP)[1].replace("'", "''")
+            )
+            for sub_metric in sub_metrics
+        )
+        sub_metrics_chart = copy.deepcopy(self.chart_base)
+        sub_metrics_chart['query'] = " ".join((self.query_preamble, sub_metrics_query))
+        return sub_metrics_chart
 
 
 def read_meta_meta(prefix, name):
@@ -182,34 +223,10 @@ def read_meta_meta(prefix, name):
         raise InvocationError(f"Cannot read file '{source_name}' to make '{name}'")
 
 
-def make_metric_chart(metrics, metric_clause_template, chart_base, query_preamble):
-    metrics_query = " UNION ALL ".join(
-        metric_clause_template.format(field_name=metric)
-        for metric in metrics
-    )
-    metrics_chart = copy.deepcopy(chart_base)
-    metrics_chart['query'] = " ".join((query_preamble, metrics_query))
-    return metrics_chart
-
-
-def make_sub_metric_chart(sub_metrics, sub_metric_clause_template,
-                          chart_base, query_preamble):
-    sub_metrics_query = " UNION ALL ".join(
-        sub_metric_clause_template.format(
-            # Note replaces to double the quotes -- this is very poor man's SQL quoting
-            field_name=sub_metric.replace('"', '""'),
-            sub_field_name=sub_metric.split(SPECIAL_SEP)[1].replace("'", "''")
-        )
-        for sub_metric in sub_metrics
-    )
-    sub_metrics_chart = copy.deepcopy(chart_base)
-    sub_metrics_chart['query'] = " ".join((query_preamble, sub_metrics_query))
-    return sub_metrics_chart
-
-
 def pairs(seq, fill='.'):
     i = iter(seq)
     return itertools.zip_longest(i, i, fillvalue=fill)
+
 
 if __name__ == "__main__":
     main()
