@@ -6,12 +6,7 @@ preamble:
       <li>זוהי גרסה ראשונית בלבד</li>
     </ul>
 
-  databases:
-    # This part is replaced with real db and table names
-    sheelon:
-      tables:
-        sheelon:
-          allow: false
+  databases: "We place the key early, but value will be rewritten"
 
   allow:
     id:
@@ -29,6 +24,12 @@ dashboard:
     title: שאלון שלומות
     description: שאלון עם דמוגרפיה
     filters:
+      # This defines the editable fields at the top. The keys here
+      # ('a_gender', 'b_vetekedu_low' etc) are used in the queries
+      # for including the field values as variables. The order
+      # of fields on top is the order of names, hence "a_" etc.
+      # The titles of columns in the CSV files are not part of
+      # this definition, they're only in the query (see below).
       a_gender:
         name: מגדר
         type: select
@@ -67,17 +68,33 @@ dashboard:
         options: ['1', '2', '3', '4', '5', '6', '7']
 
     charts:
+      # This chart, defined by Markdown, is constant
       t1:
         library: markdown
         display: |-
           # שאלון שלומות
           > על בסיס שאלון מעובד
     layout:
+      # Every row says which charts are in it
+      # A '.' means "no chart in this spot"
+      # t1 is defined above, "main_metrics" is defined
+      # dynamically by code, and the code also adds more
+      # charts and extends the layout to include them
       - [t1, '.']
       - [main_metrics, '.']
           
   generate:
+    # Under "query" are the definitions used to fetch the data
+    # for each generated chart
     query:
+      # The preamble is included in every query. It's a template
+      # here because the name of the database table is a parameter
+      # the parts in [[ ]] are added by the dashboards system, at
+      # runtime, only when the relevant filter is set
+      #
+      # The lower parts of the preamble (from "t AS (SELECT" to
+      # the end) take care of not showing data when there are
+      # too little results
       preamble_template: WITH
         filtered AS (
           SELECT * FROM "{table_name}" WHERE TRUE
@@ -93,6 +110,7 @@ dashboard:
         data AS (
           SELECT filtered.* FROM filtered CROSS JOIN t WHERE total_count>5
         )
+      # These define the data fetched for each chart (by columns)
       main_metric_clause_template:
         SELECT '{field_name}' AS what, 
                (SELECT SUM(IIF("{field_name}" = 3, 1., 0.)) / COUNT("{field_name}") FROM data) AS top_pct,
@@ -107,10 +125,11 @@ dashboard:
                COUNT("{field_name}") as cat_count
         FROM data
         GROUP BY category
-      
+
+    # Under "metrics" are the definitions used for presentation in
+    # the generated charts
     metrics:
       static:
-        # db: sheelon # now set dynamically
         library: vega-lite
         title: מדדי שלומות  # default, for main
         # insert query
