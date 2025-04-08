@@ -98,6 +98,7 @@ def write_db_table(db, table_name, csv_table):
 
     row_dicts = []
     for row in csv_table:
+        indices = {}
         row_number = next(id_provider)
         d = {id_column: row_number}
         for name,typ,val in zip(column_names, column_types, row):
@@ -109,11 +110,13 @@ def write_db_table(db, table_name, csv_table):
                         case "עולה5":
                             val = int(val)
                             assert 1 <= val <= 5
+                            add_to_index(indices, name, val)
                             val = five_to_three(val)
                         case "יורד5":
                             val = int(val)
                             assert 1 <= val <= 5
                             val = 6-val
+                            add_to_index(indices, name, val)
                             val = five_to_three(val)
                         case "בחירה":
                             val = bool(val)
@@ -131,10 +134,23 @@ def write_db_table(db, table_name, csv_table):
             else:
                 val = None
             d[name] = val
+        add_indices_to_row(d, indices)
         row_dicts.append(d)
 
     table.insert_all(row_dicts, pk=id_column)
     return dict((n,t) for n,t in zip(column_names, column_types) if t is not None)
+
+
+def add_to_index(indices, name, val):
+    if SPECIAL_SEP in name:
+        idx = name.split(SPECIAL_SEP, 1)[0]
+        indices.setdefault(idx, []).append(val)
+
+
+def add_indices_to_row(row, indices):
+    for idx, values in indices.items():
+        value = sum(values)/len(values)
+        row[idx] = five_to_three(round(value))
 
 
 class MetadataWriter:
