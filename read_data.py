@@ -11,19 +11,9 @@ from sqlite_utils import Database
 class InvocationError(ValueError):
     pass
 
-SPECIAL_SEP = "÷"  # Consider \n instead
-KILL_COLUMNS = (
-    "Collector ID",
-    "Start Date",
-    "End Date",
-    "IP Address",
-    "Email Address",
-    "First Name",
-    "Last Name",
-    "Custom Data 1",
-)
-CLICK_CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
+SPECIAL_SEP = "÷"  # Consider \n instead
+CLICK_CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 
 
 @click.command(context_settings=CLICK_CONTEXT_SETTINGS)
@@ -48,28 +38,38 @@ def main(csvfile, db_name, table_name, metadata_name, meta_prefix):
 
     reader = csv.reader(csvfile)
     csv_table = read_sheelon(reader)
-    csv_rows = write_db_table(db, table_name, csv_table)
+    column_defs = write_db_table(db, table_name, csv_table)
     meta_maker = MetadataWriter(
         name=metadata_name, prefix=meta_prefix,
         db_name=Path(db_name).stem, table_name=table_name
     )
-    meta_maker.make_for_columns(csv_rows[0].keys())
+    meta_maker.make_for_columns(column_defs)
     
 
 def read_sheelon(reader):
     try:
         row1 = next(reader)
         row2 = next(reader)
+        row3 = next(reader)
     except OSError:
         # TODO: Bug, csvfile_name not available in this function
         raise InvocationError(f"Cannot read header from '{csvfile_name}'")
 
-    if len(row1)!=len(row2):
+    if not (len(row1) == len(row2) == len(row3)):
         raise InvocationError(f"header from '{csvfile_name}' is malformed")
 
     last_t1 = None
     header_row = []
-    for (t1, t2) in zip(row1, row2):
+    column_types = []
+    for (t1, t2, question_type) in zip(row1, row2, row3):
+        # No question type -> not a question we care about
+        if not question_type:
+            header_row.append(None)
+            column_types.append(None)
+            continue
+        
+        column_types.append(question_type)
+
         if not t2 or "Response" in t2:
             header_row.append(t1)
             continue
@@ -82,37 +82,59 @@ def read_sheelon(reader):
         else:
             t1 = last_t1
 
-        if ("רכיבי" in t1 or "מדד" in t1) and "מדדים" not in t1:
+        if t1:
             header_row.append(SPECIAL_SEP.join((t1, t2)))
         else:
-            # Consider including t1 somehow... NON_SPECIAL_SEP?
             header_row.append(t2)
-    return itertools.chain([header_row], reader)
+    return itertools.chain([header_row, column_types], reader)
 
 
 def write_db_table(db, table_name, csv_table):
     table = db[table_name]
-    header = next(csv_table)
+    column_names = next(csv_table)
+    column_types = next(csv_table)
     id_column = "row_number"
     id_provider = itertools.count(3)
 
     row_dicts = []
     for row in csv_table:
-        d = {id_column: next(id_provider)}
-        for name,val in zip(header,row):
-            if name in KILL_COLUMNS:
+        row_number = next(id_provider)
+        d = {id_column: row_number}
+        for name,typ,val in zip(column_names, column_types, row):
+            if name is None or typ is None:
                 continue
             if val:
-                val = float(val)
-                if val.is_integer():
-                    val = int(val)
+                try:
+                    match typ:
+                        case "עולה5":
+                            val = int(val)
+                            assert 1 <= val <= 5
+                            val = five_to_three(val)
+                        case "יורד5":
+                            val = int(val)
+                            assert 1 <= val <= 5
+                            val = 6-val
+                            val = five_to_three(val)
+                        case "בחירה":
+                            val = bool(val)
+                        case "טקסט":
+                            pass
+                        case "סינון":
+                            try:
+                                val = int(val)
+                            except ValueError:
+                                pass  # leave as text
+                        case _:
+                            raise Exception(f"Invalid question type '{typ}'")
+                except (ValueError, AssertionError):
+                    raise Exception(f"Invalid value '{val}', Row {row_number}, at {name}")
             else:
                 val = None
             d[name] = val
         row_dicts.append(d)
-    
+
     table.insert_all(row_dicts, pk=id_column)
-    return row_dicts
+    return dict((n,t) for n,t in zip(column_names, column_types) if t is not None)
 
 
 class MetadataWriter:
@@ -129,6 +151,8 @@ class MetadataWriter:
         dashgen = self.dashgen = metadashboard['generate']
         self.chart_base = dashgen['metrics']['static']
         self.chart_base['db'] = db_name  # install db_name in source to be copied
+        self.choice_chart_base = dashgen['option_set']['static']
+        self.choice_chart_base['db'] = db_name  # maybe do something about repetition
         self.query_preamble = (
             dashgen['query']['preamble_template'].format(table_name=table_name)
         )
@@ -151,20 +175,28 @@ class MetadataWriter:
         self.write_file()
 
     def generate_charts(self, cols):
+
+        composites = order_keeping_unique(
+            col.split(SPECIAL_SEP)[0] for col in cols if SPECIAL_SEP in col
+        )
+        
         metrics = [
-            col for col in cols if SPECIAL_SEP not in col and col.startswith('מדד')
+            # Metrics are those titles where all sub-questions are 1-5
+            comp for comp in composites
+            if all(
+                implies(col.startswith(comp + SPECIAL_SEP), typ in ('עולה5', 'יורד5'))
+                for col, typ in cols.items()
+            )
         ]
         self.dashboard['charts']['main_metrics'] = self.make_metric_chart(
             metrics, self.dashgen['query']['main_metric_clause_template'],
         )
 
         for idx, metric in enumerate(metrics, start=1):
+            # TODO: fold more of this block into make_sub_metric_chart()
             sub_metrics = [
                 col for col in cols
-                if SPECIAL_SEP in col and (
-                    col.startswith(metric) or
-                    col.startswith(metric.replace('מדד', 'רכיבי'))
-                )
+                if col.startswith(metric + SPECIAL_SEP)
             ]
             sub_metrics_chart = self.make_sub_metric_chart(
                 sub_metrics, self.dashgen['query']['sub_metric_clause_template'],
@@ -172,6 +204,20 @@ class MetadataWriter:
             sub_metrics_chart['title'] = metric
             self.dashboard['charts'][f'm-{idx:02d}'] = sub_metrics_chart
 
+        multichoices = [
+            comp for comp in composites
+            if all(
+                implies(
+                    col.startswith(comp + SPECIAL_SEP),
+                    typ == 'בחירה' or (typ == 'טקסט' and 'אחר' in col)
+                )
+                for col, typ in cols.items()
+            )
+        ]
+        for idx, multi in enumerate(multichoices, start=1):
+            multichoice_chart = self.make_choice_chart(cols, multi)
+            self.dashboard['charts'][f'c-{idx:02d}'] = multichoice_chart
+            
     def extend_layout(self):
         self.dashboard['layout'].extend(
             pairs(
@@ -179,6 +225,12 @@ class MetadataWriter:
                 if f'm-{j:02d}' in self.dashboard['charts']
             )
         )
+        self.dashboard['layout'].extend(
+            [f'c-{j:02d}', '.']
+            for j in range(len(self.dashboard['charts']))
+            if f'c-{j:02d}' in self.dashboard['charts']
+        )
+
 
     def set_dashboard(self, dashboard_name):
         dashboards = self.metadata['plugins'].setdefault('datasette-dashboards', {})
@@ -212,6 +264,24 @@ class MetadataWriter:
         sub_metrics_chart['query'] = " ".join((self.query_preamble, sub_metrics_query))
         return sub_metrics_chart
 
+    def make_choice_chart(self, cols, choice):
+        options = [
+            col for col,typ in cols.items()
+            if col.startswith(choice + SPECIAL_SEP) and typ == 'בחירה'
+        ]
+        query = " UNION ALL ".join(
+            self.dashgen['query']['option_set_clause_template'].format(
+                field_title=option.split(SPECIAL_SEP, 1)[1],
+                field_name=option,
+            )
+            for option in options
+        )
+        chart = copy.deepcopy(self.choice_chart_base)
+        chart['query'] = " ".join((self.query_preamble, query))
+        chart['title'] = title = choice + '\N{RLM}'
+        chart['display']['encoding']['color']['title'] = title
+        chart['display']['encoding']['x']['title'] = title
+        return chart
 
 def read_meta_meta(prefix, name):
     source_name = prefix+name
@@ -226,6 +296,20 @@ def read_meta_meta(prefix, name):
 def pairs(seq, fill='.'):
     i = iter(seq)
     return itertools.zip_longest(i, i, fillvalue=fill)
+
+
+def order_keeping_unique(iterable):
+    return list(dict.fromkeys(iterable))
+
+
+def implies(p, q):
+    return (not p) or q
+
+
+def five_to_three(val):
+    """Take an int in range 1-5, and turn 1,2=>1, 3=>2, 4,5=>3"""
+    d = {1:1, 2:1, 3:2, 4:3, 5:3}
+    return d[val]
 
 
 if __name__ == "__main__":

@@ -33,39 +33,54 @@ dashboard:
       a_gender:
         name: מגדר
         type: select
-        options: ["1", "2", "3"]
-      b_vetekedu_low:
+        options: [גבר, אישה, מעדיף/ה לא לציין]
+      b_gen_expr_low:
         name: מינ ותק בחינוך
         type: number
         min: 0
         max: 100
         step: 1
-      c_vetekedu_high:
+      c_gen_expr_high:
         name: מקס ותק בחינוך
         type: number
         min: 0
         max: 100
         step: 1
-      d_vetekhoraa_low:
-        name: מינ ותק בהוראה
+      d_local_expr_low:
+        name: מינ ותק בחינוך במ״א אשכול
         type: number
         min: 0
         max: 100
         step: 1
-      e_vetekhoraa_high:
-        name: מקס ותק בהוראה
+      e_local_expr_high:
+        name: מקס ותק בחינוך במ״א אשכול
         type: number
         min: 0
         max: 100
         step: 1
-      f_tafkid:
+      f_position:
         name: תפקיד
         type: select
-        options: ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+        options:
+          - יועץ/ת
+          - מורה מקצוע
+          - מורה/ת שילוב
+          - מחנכ/ת
+          - מתנדב/ת
+          - סייע/ת גיל הרך
+          - סייע/ת חינוך מיוחד
+          - תומך/ת הוראה
       g_school:
         name: בית ספר
         type: select
-        options: ['1', '2', '3', '4', '5', '6', '7']
+        options:
+          - מרחבי אשכול
+          - נופי הבשור
+          - נעם נצרים בנות
+          - נעם נצרים בנים
+          - קידום הנוער
+          - שדות אשכול
+          - שחר אשכול
 
     charts:
       # This chart, defined by Markdown, is constant
@@ -73,7 +88,7 @@ dashboard:
         library: markdown
         display: |-
           # שאלון שלומות
-          > על בסיס שאלון מעובד
+          > מידע גולמי מעובד להצגה
     layout:
       # Every row says which charts are in it
       # A '.' means "no chart in this spot"
@@ -98,13 +113,13 @@ dashboard:
       preamble_template: WITH
         filtered AS (
           SELECT * FROM "{table_name}" WHERE TRUE
-            [[ AND "SEX" = :a_gender ]]
-            [[ AND "VETEKEDU" >= :b_vetekedu_low ]]
-            [[ AND "VETEKEDU" <= :c_vetekedu_high ]]
-            [[ AND "VETEKHORAA"  >= :d_vetekhoraa_low ]]
-            [[ AND "VETEKHORAA"  <= :e_vetekhoraa_high ]]
-            [[ AND "TAFKID" = :f_tafkid ]]
-            [[ AND "SCHOOL" = :g_school ]]
+            [[ AND "מגדר" = :a_gender ]]
+            [[ AND "שנות ותק בחינוך/בהוראה" >= :b_gen_expr_low ]]
+            [[ AND "שנות ותק בחינוך/בהוראה" <= :c_gen_expr_high ]]
+            [[ AND "שנות וותק במערכת החינוך במועצה איזורית אשכול" >= :d_local_expr_low ]]
+            [[ AND "שנות וותק במערכת החינוך במועצה איזורית אשכול" <= :e_local_expr_high ]]
+            [[ AND "תפקידך במערכת החינוך:" = :f_position ]]
+            [[ AND "שם בית הספר" = :g_school ]]
           ),
         t AS (SELECT COUNT(*) AS total_count FROM filtered),
         data AS (
@@ -125,8 +140,11 @@ dashboard:
                COUNT("{field_name}") as cat_count
         FROM data
         GROUP BY category
+      option_set_clause_template:
+        SELECT '{field_title}' AS what, SUM("{field_name}") AS num
+        FROM data
 
-    # Under "metrics" are the definitions used for presentation in
+    # Last are the definitions used for presentation in
     # the generated charts
     metrics:
       static:
@@ -158,3 +176,42 @@ dashboard:
               scale:
                 domain: [1, 2, 3]
                 range: ["#c71212", "#faf614", "#1dc70e"]
+
+    option_set:
+      static:
+        library: vega-lite
+        # insert title
+        # insert query
+        display:
+          mark: { type: bar, tooltip: true }
+          # transform:
+          #   - calculate: "replace(datum.what,
+          #     'אחר (נא',
+          #     '‏אחר (נא'
+          #     )"
+          #     # The replacement has a RLM, to make values that
+          #     # start with this string last in order
+          #     as: sorter
+          encoding:
+            y:
+              field: num
+              scale:
+                domain:
+                  - 0
+                  - 100
+              title: 'מספר'
+              type: quantitative
+            x:
+              field: what # sorter
+              type: nominal
+              # title to be inserted here
+              sort: "-y"
+            color:
+              field: what # sorter
+              type: nominal
+              # title to be inserted here
+              legend:
+                direction: vertical
+                orient: top
+                # labelAlign: right
+                labelLimit: 320
