@@ -292,3 +292,4 @@ dashboard:
               field: value
               type: nominal
               sort: { field: sorter } # This doesn't work
+              legend: null
