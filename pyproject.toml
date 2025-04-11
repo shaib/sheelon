@@ -9,6 +9,7 @@ dependencies = [
     "datasette>=0.65.1",
     "datasette-auth-passwords>=1.1.1",
     "datasette-dashboards>=0.7.0",
+    "datasette-render-markdown>=2.2.1",
     "datasette-vega>=0.6.2",
     "pysqlite3-binary>=0.5.4",
     "sqlite-utils>=3.38",
@@ -17,3 +18,6 @@ dependencies = [
     # Noteworthy:
     # - datasette-cluster-map: Plot latitude/longitude on a map
 ]
+
+[tool.uv.sources]
+datasette-dashboards = { git = "https://github.com/shaib/datasette-dashboards.git", rev = "issue_288_markdown_config" }

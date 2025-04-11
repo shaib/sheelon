@@ -89,13 +89,14 @@ dashboard:
         display: |-
           # שאלון שלומות
           > מידע גולמי מעובד להצגה
+
     layout:
       # Every row says which charts are in it
       # A '.' means "no chart in this spot"
       # t1 is defined above, "main_metrics" is defined
       # dynamically by code, and the code also adds more
       # charts and extends the layout to include them
-      - [t1, '.']
+      - [t1, filter_stats]
       - [main_metrics, '.']
           
   generate:
@@ -126,6 +127,35 @@ dashboard:
           SELECT filtered.* FROM filtered CROSS JOIN t WHERE total_count>5
         )
       # These define the data fetched for each chart (by columns)
+
+      filter_stats:
+        nominal:
+          clause_template:
+            SELECT *,  ROW_NUMBER() OVER(ORDER BY value) AS sorter
+            FROM (
+            SELECT '{title}' AS what, "{field}" AS value, COUNT(*) AS num
+            FROM data
+            GROUP BY "{field}"
+            )
+
+          fields:
+            מגדר: מגדר
+            "תפקידך במערכת החינוך:": תפקיד
+            "שם בית הספר": בית ספר
+
+        range:
+          clause_template:
+            SELECT '{title}' AS what, '{bottom}-{top}' AS value,
+            COUNT(*) AS num, '{bottom:03}' as sorter
+            FROM data
+            WHERE "{field}" >= {bottom} and "{field}" < {top}
+
+          fields:
+            "שנות ותק בחינוך/בהוראה": ותק בחינוך
+            "שנות וותק במערכת החינוך במועצה איזורית אשכול": ותק במ״א אשכול
+
+          range_pts: [0,2,5,10,20,150]
+          
       main_metric_clause_template:
         SELECT '{field_name}' AS what, 
                (SELECT SUM(IIF("{field_name}" = 3, 1., 0.)) / COUNT("{field_name}") FROM data) AS top_pct,
@@ -133,6 +163,7 @@ dashboard:
                COUNT("{field_name}") as cat_count
         FROM data
         GROUP BY category
+
       sub_metric_clause_template:
         SELECT '{sub_field_name}' AS what, 
                (SELECT SUM(IIF("{field_name}" = 3, 1., 0.)) / COUNT("{field_name}") FROM data) AS top_pct,
@@ -140,12 +171,19 @@ dashboard:
                COUNT("{field_name}") as cat_count
         FROM data
         GROUP BY category
+
       option_set_clause_template:
         SELECT '{field_title}' AS what, SUM("{field_name}") AS num
         FROM data
 
+      option_set_summary_template:
+        SELECT what, num
+        FROM ({query})
+        ORDER BY num DESC
+        LIMIT {limit}
+
     # Last are the definitions used for presentation in
-    # the generated charts
+    # the generated charts        
     metrics:
       static:
         library: vega-lite
@@ -184,6 +222,7 @@ dashboard:
         # insert query
         display:
           mark: { type: bar, tooltip: true }
+          height: 400
           # transform:
           #   - calculate: "replace(datum.what,
           #     'אחר (נא',
@@ -206,12 +245,50 @@ dashboard:
               type: nominal
               # title to be inserted here
               sort: "-y"
-            color:
-              field: what # sorter
+            # color:
+            #   field: what # sorter
+            #   type: nominal
+            #   # title to be inserted here
+            #   legend:
+            #     direction: vertical
+            #     orient: top
+            #     # labelAlign: right
+            #     labelLimit: 320
+
+    option_set_desc:
+      static:
+        library: markdown
+        settings:
+          extensions:
+            - extra
+          extra_attrs:
+            "*":
+              - class
+              - dir
+
+    filter_stats:
+      static:
+        library: vega-lite
+        title: דמוגרפיה
+        # insert query
+        display:
+          mark: { type: bar, tooltip: true }
+          transform: 
+            - filter:
+                "datum.value!==null"
+          encoding:
+            y:
+              field: num
+              # scale:
+              #   domain:
+              #     - 0
+              #     - 100
+              title: 'מספר'
+              type: quantitative
+            x:
+              field: what
               type: nominal
-              # title to be inserted here
-              legend:
-                direction: vertical
-                orient: top
-                # labelAlign: right
-                labelLimit: 320
+            color:
+              field: value
+              type: nominal
+              sort: { field: sorter } # This doesn't work

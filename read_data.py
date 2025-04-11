@@ -43,7 +43,7 @@ def main(csvfile, db_name, table_name, metadata_name, meta_prefix):
         name=metadata_name, prefix=meta_prefix,
         db_name=Path(db_name).stem, table_name=table_name
     )
-    meta_maker.make_for_columns(column_defs)
+    meta_maker.make_for_columns(column_defs, db)
     
 
 def read_sheelon(reader):
@@ -165,10 +165,15 @@ class MetadataWriter:
         meta_meta = read_meta_meta(prefix, name)
         metadashboard = meta_meta['dashboard']
         dashgen = self.dashgen = metadashboard['generate']
+        self.table_name = table_name
+        self.filter_stats_query_defs = dashgen['query']['filter_stats']
         self.chart_base = dashgen['metrics']['static']
         self.chart_base['db'] = db_name  # install db_name in source to be copied
         self.choice_chart_base = dashgen['option_set']['static']
         self.choice_chart_base['db'] = db_name  # maybe do something about repetition
+        self.filter_stats_chart = dashgen['filter_stats']
+        self.filter_stats_chart['static']['db'] = db_name  # maybe do something
+        self.choice_desc_base = dashgen['option_set_desc']['static']
         self.query_preamble = (
             dashgen['query']['preamble_template'].format(table_name=table_name)
         )
@@ -184,13 +189,45 @@ class MetadataWriter:
         }}}}
         self.dashboard = copy.deepcopy(metadashboard['static'] )
 
-    def make_for_columns(self, cols):
-        self.generate_charts(cols)
+    def make_for_columns(self, cols, db):
+        self.generate_filter_stats_chart()
+        self.generate_charts(cols, db)
         self.extend_layout()
         self.set_dashboard(self.dashboard_name)
         self.write_file()
 
-    def generate_charts(self, cols):
+    def generate_filter_stats_chart(self):
+        nominal = self.filter_stats_query_defs['nominal']
+        nominal_clauses = (
+            nominal['clause_template'].format(field=field, title=title)
+            for field, title
+            in nominal['fields'].items()
+        )
+        rang = self.filter_stats_query_defs['range']
+        range_clauses = (
+            rang['clause_template'].format(
+                field=field, title=title, top=top, bottom=bottom
+            )
+            for field, title in rang['fields'].items()
+            for bottom, top in itertools.pairwise(rang['range_pts'])
+        )
+        query = self.query_preamble + "\n" + (
+            " UNION ALL ".join(
+                itertools.chain(nominal_clauses, range_clauses)
+            )
+        )
+        chart = self.filter_stats_chart['static']
+        chart['query'] = query
+        # for field in itertools.chain(nominal['fields'], rang['fields']):
+        #     component = copy.deepcopy(self.filter_stats_chart['component'])
+        #     component['transform'] = [
+        #         dict(filter=f"datum.what==='{field}'")
+        #     ]
+        #     component['title'] = field
+        #     chart['hconcat'].append(component)
+        self.dashboard['charts']['filter_stats'] = chart
+        
+    def generate_charts(self, cols, db):
 
         composites = order_keeping_unique(
             col.split(SPECIAL_SEP)[0] for col in cols if SPECIAL_SEP in col
@@ -231,8 +268,9 @@ class MetadataWriter:
             )
         ]
         for idx, multi in enumerate(multichoices, start=1):
-            multichoice_chart = self.make_choice_chart(cols, multi)
+            multichoice_chart, multichoice_text = self.make_choice_charts(cols, multi, db)
             self.dashboard['charts'][f'c-{idx:02d}'] = multichoice_chart
+            self.dashboard['charts'][f'd-{idx:02d}'] = multichoice_text
             
     def extend_layout(self):
         self.dashboard['layout'].extend(
@@ -242,7 +280,7 @@ class MetadataWriter:
             )
         )
         self.dashboard['layout'].extend(
-            [f'c-{j:02d}', '.']
+            [f'c-{j:02d}', f'd-{j:02d}']
             for j in range(len(self.dashboard['charts']))
             if f'c-{j:02d}' in self.dashboard['charts']
         )
@@ -280,24 +318,60 @@ class MetadataWriter:
         sub_metrics_chart['query'] = " ".join((self.query_preamble, sub_metrics_query))
         return sub_metrics_chart
 
-    def make_choice_chart(self, cols, choice):
+    def make_choice_charts(self, cols, choice, db):
         options = [
             col for col,typ in cols.items()
             if col.startswith(choice + SPECIAL_SEP) and typ == 'בחירה'
         ]
-        query = " UNION ALL ".join(
+        chart = self.make_choice_chart(choice, options)
+        text = self.make_choice_text(choice, options, cols, db)
+        return chart, text
+
+    def make_choice_chart(self, choice, options):
+        base_query = " UNION ALL ".join(
             self.dashgen['query']['option_set_clause_template'].format(
                 field_title=option.split(SPECIAL_SEP, 1)[1],
                 field_name=option,
             )
             for option in options
         )
+        chart_query = self.dashgen['query']['option_set_summary_template'].format(
+            query=base_query,
+            limit=10  # TODO: make this easily parameterizable?
+        )
         chart = copy.deepcopy(self.choice_chart_base)
-        chart['query'] = " ".join((self.query_preamble, query))
+        chart['query'] = " ".join((self.query_preamble, chart_query))
         chart['title'] = title = choice + '\N{RLM}'
-        chart['display']['encoding']['color']['title'] = title
-        chart['display']['encoding']['x']['title'] = title
+        # chart['display']['encoding']['color']['title'] = title
+        # chart['display']['encoding']['x']['title'] = title
         return chart
+
+    def make_choice_text(self, choice, options, cols, db):
+        options = [option.split(SPECIAL_SEP, 1)[1] for option in options]
+        other_col = next(
+            col for col,typ in cols.items()
+            if col.startswith(choice + SPECIAL_SEP) and typ == 'טקסט'
+        )
+        text_query = f'SELECT "{other_col}" AS it FROM "{self.table_name}"'
+        other_answers = [r["it"] for r in db.query(text_query)]
+        chart = copy.deepcopy(self.choice_desc_base)
+        title_line = "### " + choice
+
+        other_html = (
+            other_col.split(SPECIAL_SEP, 1)[1] +
+            '<ul class="bullets">' +
+            "".join(f"<li>{answer}</li>" for answer in other_answers if answer) +
+            "</ul>"
+        )
+        options.append(other_html)
+        answers = (
+            '<ul class="bullets">' +
+            "".join(f"<li>{option}</li>" for option in options) +
+            "</ul>"
+        )
+        chart['display'] = "\n".join([title_line, "", answers])
+        return chart
+
 
 def read_meta_meta(prefix, name):
     source_name = prefix+name
