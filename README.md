@@ -24,6 +24,25 @@ $ uv run datasette --root sheelon.db -m metadata.yml
 ```
 to log in as root with a token instead.
 
+To deploy to Vercel (assuming you have a project set up called
+"shlomut"), you need to have vercel's client installed and in your
+path, then run this command:
+
+``` console
+$ uv run datasette publish vercel --project shlomut \
+    --install datasette-auth-passwords \
+    --install datasette-dashboards \
+    --metadata metadata.yml tmp.db --vercel-json vercel.json
+```
+
+Except that currently, we need our patched version of 
+datasette-dashboards, so use
+
+``` console
+    --install git+https://github.com/shaib/datasette-dashboards.git@issue_288_markdown_config
+```
+instead.
+
 <hr/>
 
 This project was started from the Datasette example for Glitch projects,
